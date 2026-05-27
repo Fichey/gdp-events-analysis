@@ -98,20 +98,37 @@ const API = '/api/v1';
 let gdpChart, eventsChart;
 
 async function init() {
-  const [countries, types] = await Promise.all([
-    fetch(`${API}/gdp/countries`).then(r => r.json()),
-    fetch(`${API}/events/types`).then(r => r.json()),
-  ]);
-  const cs = document.getElementById('countrySelect');
-  countries.forEach(c => {
-    const o = document.createElement('option');
-    o.value = c.code; o.textContent = c.name; cs.appendChild(o);
-  });
-  const et = document.getElementById('eventTypeSelect');
-  types.forEach(t => {
-    const o = document.createElement('option');
-    o.value = t.theme_code; o.textContent = t.theme_name; et.appendChild(o);
-  });
+  const statusEl = document.getElementById('status');
+  try {
+    const [countries, types] = await Promise.all([
+      safeFetch(`${API}/gdp/countries`),
+      safeFetch(`${API}/events/types`),
+    ]);
+    const cs = document.getElementById('countrySelect');
+    countries.forEach(c => {
+      const o = document.createElement('option');
+      o.value = c.code; o.textContent = c.name; cs.appendChild(o);
+    });
+    const et = document.getElementById('eventTypeSelect');
+    types.forEach(t => {
+      const o = document.createElement('option');
+      o.value = t.theme_code; o.textContent = t.theme_name; et.appendChild(o);
+    });
+    statusEl.textContent = `Gotowy. ${countries.length} krajów, ${types.length} typów eventów.`;
+    statusEl.style.color = '#2e7d32';
+  } catch(err) {
+    console.error('init failed:', err);
+    statusEl.textContent = `Błąd inicjalizacji: ${err.message}`;
+    statusEl.style.color = '#c62828';
+  }
+}
+
+async function safeFetch(url) {
+  const r = await fetch(url);
+  if (!r.ok) throw new Error(`HTTP ${r.status} dla ${url}`);
+  const data = await r.json();
+  console.log(`OK ${url}`, data);
+  return data;
 }
 
 async function loadData() {
@@ -121,6 +138,7 @@ async function loadData() {
   const yearEnd = document.getElementById('yearEnd').value;
   const statusEl = document.getElementById('status');
   statusEl.textContent = 'Ładowanie...';
+  statusEl.style.color = '#888';
 
   const gdpUrl = `${API}/gdp/${country}?year_start=${yearStart}&year_end=${yearEnd}`;
   let eventsUrl = `${API}/events/${country}?year_start=${yearStart}&year_end=${yearEnd}`;
@@ -128,16 +146,23 @@ async function loadData() {
   let corrUrl = `${API}/analysis/correlations?country_code=${country}`;
   if (eventType) corrUrl += `&event_type=${eventType}`;
 
-  const [gdpData, eventsData, corrData] = await Promise.all([
-    fetch(gdpUrl).then(r => r.json()),
-    fetch(eventsUrl).then(r => r.json()),
-    fetch(corrUrl).then(r => r.json()),
-  ]);
+  try {
+    const [gdpData, eventsData, corrData] = await Promise.all([
+      safeFetch(gdpUrl),
+      safeFetch(eventsUrl),
+      safeFetch(corrUrl),
+    ]);
 
-  renderGdpChart(gdpData);
-  renderEventsChart(eventsData);
-  renderCorrelations(corrData);
-  statusEl.textContent = `Załadowano: ${gdpData.length} rekordów PKB, ${eventsData.length} rekordów eventów`;
+    renderGdpChart(gdpData);
+    renderEventsChart(eventsData);
+    renderCorrelations(corrData);
+    statusEl.textContent = `Załadowano: ${gdpData.length} rekordów PKB, ${eventsData.length} rekordów eventów, ${corrData.length} korelacji`;
+    statusEl.style.color = '#2e7d32';
+  } catch(err) {
+    console.error('loadData failed:', err);
+    statusEl.textContent = `Błąd: ${err.message}`;
+    statusEl.style.color = '#c62828';
+  }
 }
 
 function renderGdpChart(data) {

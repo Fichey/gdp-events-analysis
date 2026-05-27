@@ -33,7 +33,7 @@ class EventTypeOut(BaseModel):
 class GdeltEventOut(BaseModel):
     country_code: str
     year: int
-    month: Optional[int]
+    month: Optional[int] = None
     article_count: int
     theme_code: Optional[str] = None
     theme_name: Optional[str] = None
