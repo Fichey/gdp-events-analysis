@@ -1,0 +1,54 @@
+version: "3.9"
+
+# TEST environment – runs unit and performance tests, then exits
+services:
+  db:
+    image: postgres:15-alpine
+    environment:
+      POSTGRES_DB: gdp_events_test
+      POSTGRES_USER: app
+      POSTGRES_PASSWORD: app
+    volumes:
+      - ./db/init.sql:/docker-entrypoint-initdb.d/init.sql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U app -d gdp_events_test"]
+      interval: 5s
+      retries: 10
+
+  backend:
+    build: ./backend
+    environment:
+      DATABASE_URL: postgresql://app:app@db:5432/gdp_events_test
+    depends_on:
+      db:
+        condition: service_healthy
+    ports:
+      - "8001:8000"
+
+  unit-tests:
+    build:
+      context: .
+      dockerfile: tests/unit/Dockerfile
+    environment:
+      DATABASE_URL: postgresql://app:app@db:5432/gdp_events_test
+      API_URL: http://backend:8000
+    depends_on:
+      db:
+        condition: service_healthy
+      backend:
+        condition: service_started
+    command: pytest /tests/unit -v --tb=short
+
+  perf-tests:
+    build:
+      context: .
+      dockerfile: tests/performance/Dockerfile
+    environment:
+      API_URL: http://backend:8000
+    depends_on:
+      - backend
+    command: >
+      locust -f /tests/performance/locustfile.py
+      --headless -u 10 -r 2 --run-time 30s
+      --host http://backend:8000
+      --only-summary

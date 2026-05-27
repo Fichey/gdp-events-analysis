@@ -1,0 +1,208 @@
+<!DOCTYPE html>
+<html lang="pl">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>PKB vs Eventy – Analiza</title>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: 'Segoe UI', sans-serif; background: #f0f2f5; color: #333; }
+    header { background: #1a237e; color: #fff; padding: 1.2rem 2rem; }
+    header h1 { font-size: 1.5rem; }
+    header p { font-size: 0.9rem; opacity: 0.8; margin-top: 0.3rem; }
+    .container { max-width: 1200px; margin: 2rem auto; padding: 0 1rem; }
+    .card { background: #fff; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,.1); padding: 1.5rem; margin-bottom: 1.5rem; }
+    .controls { display: flex; flex-wrap: wrap; gap: 1rem; align-items: flex-end; }
+    .control-group { display: flex; flex-direction: column; gap: 0.3rem; }
+    label { font-size: 0.85rem; font-weight: 600; color: #555; }
+    select, input { padding: 0.5rem 0.75rem; border: 1px solid #ccc; border-radius: 6px; font-size: 0.95rem; }
+    button { padding: 0.55rem 1.2rem; background: #1a237e; color: #fff; border: none; border-radius: 6px; cursor: pointer; font-size: 0.95rem; }
+    button:hover { background: #283593; }
+    .charts { display: grid; grid-template-columns: 1fr 1fr; gap: 1.5rem; }
+    @media(max-width:768px) { .charts { grid-template-columns: 1fr; } }
+    canvas { max-height: 320px; }
+    .correlation-table { width: 100%; border-collapse: collapse; font-size: 0.9rem; }
+    .correlation-table th { background: #1a237e; color: #fff; padding: 0.6rem 0.8rem; text-align: left; }
+    .correlation-table td { padding: 0.5rem 0.8rem; border-bottom: 1px solid #e0e0e0; }
+    .correlation-table tr:hover td { background: #f5f5f5; }
+    .badge { display: inline-block; padding: 0.2rem 0.5rem; border-radius: 4px; font-size: 0.8rem; font-weight: 600; }
+    .badge-pos { background: #e8f5e9; color: #2e7d32; }
+    .badge-neg { background: #ffebee; color: #c62828; }
+    .badge-neu { background: #fff3e0; color: #ef6c00; }
+    #status { font-size: 0.85rem; color: #888; margin-top: 0.5rem; }
+    .section-title { font-size: 1.1rem; font-weight: 700; margin-bottom: 1rem; color: #1a237e; }
+  </style>
+</head>
+<body>
+<header>
+  <h1>Wpływ zmian PKB krajów na ilość i typy organizowanych eventów</h1>
+  <p>Dane: World Bank Open Data API &amp; GDELT Project API</p>
+</header>
+
+<div class="container">
+
+  <div class="card">
+    <div class="section-title">Filtry</div>
+    <div class="controls">
+      <div class="control-group">
+        <label for="countrySelect">Kraj</label>
+        <select id="countrySelect"></select>
+      </div>
+      <div class="control-group">
+        <label for="eventTypeSelect">Typ eventu</label>
+        <select id="eventTypeSelect"><option value="">Wszystkie</option></select>
+      </div>
+      <div class="control-group">
+        <label for="yearStart">Od roku</label>
+        <input type="number" id="yearStart" value="2015" min="2000" max="2030" style="width:90px" />
+      </div>
+      <div class="control-group">
+        <label for="yearEnd">Do roku</label>
+        <input type="number" id="yearEnd" value="2023" min="2000" max="2030" style="width:90px" />
+      </div>
+      <button onclick="loadData()">Załaduj dane</button>
+    </div>
+    <div id="status"></div>
+  </div>
+
+  <div class="charts">
+    <div class="card">
+      <div class="section-title">PKB (USD)</div>
+      <canvas id="gdpChart"></canvas>
+    </div>
+    <div class="card">
+      <div class="section-title">Liczba artykułów GDELT (eventy)</div>
+      <canvas id="eventsChart"></canvas>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="section-title">Korelacje Pearsona: PKB vs Typ Eventu</div>
+    <table class="correlation-table">
+      <thead>
+        <tr>
+          <th>Kraj</th><th>Typ eventu</th><th>Korelacja</th><th>Próba (lat)</th><th>Interpretacja</th>
+        </tr>
+      </thead>
+      <tbody id="correlationBody">
+        <tr><td colspan="5" style="text-align:center;padding:1rem;color:#999">Załaduj dane...</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+</div>
+
+<script>
+const API = '/api/v1';
+let gdpChart, eventsChart;
+
+async function init() {
+  const [countries, types] = await Promise.all([
+    fetch(`${API}/gdp/countries`).then(r => r.json()),
+    fetch(`${API}/events/types`).then(r => r.json()),
+  ]);
+  const cs = document.getElementById('countrySelect');
+  countries.forEach(c => {
+    const o = document.createElement('option');
+    o.value = c.code; o.textContent = c.name; cs.appendChild(o);
+  });
+  const et = document.getElementById('eventTypeSelect');
+  types.forEach(t => {
+    const o = document.createElement('option');
+    o.value = t.theme_code; o.textContent = t.theme_name; et.appendChild(o);
+  });
+}
+
+async function loadData() {
+  const country = document.getElementById('countrySelect').value;
+  const eventType = document.getElementById('eventTypeSelect').value;
+  const yearStart = document.getElementById('yearStart').value;
+  const yearEnd = document.getElementById('yearEnd').value;
+  const statusEl = document.getElementById('status');
+  statusEl.textContent = 'Ładowanie...';
+
+  const gdpUrl = `${API}/gdp/${country}?year_start=${yearStart}&year_end=${yearEnd}`;
+  let eventsUrl = `${API}/events/${country}?year_start=${yearStart}&year_end=${yearEnd}`;
+  if (eventType) eventsUrl += `&event_type=${eventType}`;
+  let corrUrl = `${API}/analysis/correlations?country_code=${country}`;
+  if (eventType) corrUrl += `&event_type=${eventType}`;
+
+  const [gdpData, eventsData, corrData] = await Promise.all([
+    fetch(gdpUrl).then(r => r.json()),
+    fetch(eventsUrl).then(r => r.json()),
+    fetch(corrUrl).then(r => r.json()),
+  ]);
+
+  renderGdpChart(gdpData);
+  renderEventsChart(eventsData);
+  renderCorrelations(corrData);
+  statusEl.textContent = `Załadowano: ${gdpData.length} rekordów PKB, ${eventsData.length} rekordów eventów`;
+}
+
+function renderGdpChart(data) {
+  const labels = data.map(d => d.year);
+  const values = data.map(d => d.gdp_usd ? (d.gdp_usd / 1e12).toFixed(2) : null);
+  if (gdpChart) gdpChart.destroy();
+  gdpChart = new Chart(document.getElementById('gdpChart'), {
+    type: 'line',
+    data: {
+      labels,
+      datasets: [{ label: 'PKB (bln USD)', data: values, borderColor: '#1a237e',
+        backgroundColor: 'rgba(26,35,126,0.1)', fill: true, tension: 0.3 }]
+    },
+    options: { responsive: true, plugins: { legend: { position: 'bottom' } } }
+  });
+}
+
+function renderEventsChart(data) {
+  const types = [...new Set(data.map(d => d.theme_code || 'ALL'))];
+  const years = [...new Set(data.map(d => d.year))].sort();
+  const colors = ['#e53935','#8e24aa','#1e88e5','#43a047','#fb8c00','#6d4c41'];
+
+  const datasets = types.map((t, i) => ({
+    label: t,
+    data: years.map(y => {
+      const row = data.find(d => d.year === y && (d.theme_code || 'ALL') === t);
+      return row ? row.article_count : 0;
+    }),
+    backgroundColor: colors[i % colors.length],
+  }));
+
+  if (eventsChart) eventsChart.destroy();
+  eventsChart = new Chart(document.getElementById('eventsChart'), {
+    type: 'bar',
+    data: { labels: years, datasets },
+    options: { responsive: true, plugins: { legend: { position: 'bottom' } },
+      scales: { x: { stacked: true }, y: { stacked: true } } }
+  });
+}
+
+function renderCorrelations(data) {
+  const tbody = document.getElementById('correlationBody');
+  if (!data.length) {
+    tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;color:#999">Brak danych korelacji. Uruchom procesor.</td></tr>';
+    return;
+  }
+  tbody.innerHTML = data.map(r => {
+    const c = parseFloat(r.correlation_coefficient);
+    let badge, interp;
+    if (c > 0.5) { badge = 'badge-pos'; interp = 'Silna pozytywna'; }
+    else if (c < -0.5) { badge = 'badge-neg'; interp = 'Silna negatywna'; }
+    else if (c > 0.2) { badge = 'badge-pos'; interp = 'Słaba pozytywna'; }
+    else if (c < -0.2) { badge = 'badge-neg'; interp = 'Słaba negatywna'; }
+    else { badge = 'badge-neu'; interp = 'Brak korelacji'; }
+    return `<tr>
+      <td>${r.country_code}</td>
+      <td>${r.theme_name}</td>
+      <td><span class="badge ${badge}">${c.toFixed(3)}</span></td>
+      <td>${r.sample_size}</td>
+      <td>${interp}</td>
+    </tr>`;
+  }).join('');
+}
+
+init();
+</script>
+</body>
+</html>

@@ -1,0 +1,10 @@
+FROM python:3.11-slim
+WORKDIR /tests
+RUN apt-get update && apt-get install -y --no-install-recommends libpq-dev gcc && rm -rf /var/lib/apt/lists/*
+COPY tests/unit/requirements.txt /tests/requirements.txt
+RUN pip install --no-cache-dir -r requirements.txt
+COPY tests/ /tests/
+COPY backend/ /backend/
+COPY ingestion/ /ingestion/
+COPY processing/ /processing/
+CMD ["pytest", "/tests/unit", "-v", "--tb=short"]

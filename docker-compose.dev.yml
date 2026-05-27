@@ -1,0 +1,65 @@
+version: "3.9"
+
+# DEVELOPMENT environment – hot-reload, exposed ports, verbose logging
+services:
+  db:
+    image: postgres:15-alpine
+    environment:
+      POSTGRES_DB: gdp_events_dev
+      POSTGRES_USER: app
+      POSTGRES_PASSWORD: app
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_dev_data:/var/lib/postgresql/data
+      - ./db/init.sql:/docker-entrypoint-initdb.d/init.sql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U app -d gdp_events_dev"]
+      interval: 10s
+      retries: 5
+
+  backend:
+    build: ./backend
+    volumes:
+      - ./backend:/app
+    command: uvicorn main:app --host 0.0.0.0 --port 8000 --reload
+    environment:
+      DATABASE_URL: postgresql://app:app@db:5432/gdp_events_dev
+    ports:
+      - "8000:8000"
+    depends_on:
+      db:
+        condition: service_healthy
+
+  ingestion:
+    build: ./ingestion
+    volumes:
+      - ./ingestion:/app
+    command: python scheduler.py --source all --once
+    environment:
+      DATABASE_URL: postgresql://app:app@db:5432/gdp_events_dev
+      INGEST_YEAR_START: "2020"
+      INGEST_YEAR_END: "2022"
+    depends_on:
+      db:
+        condition: service_healthy
+
+  processing:
+    build: ./processing
+    volumes:
+      - ./processing:/app
+    environment:
+      DATABASE_URL: postgresql://app:app@db:5432/gdp_events_dev
+    depends_on:
+      db:
+        condition: service_healthy
+
+  frontend:
+    build: ./frontend
+    ports:
+      - "3000:80"
+    depends_on:
+      - backend
+
+volumes:
+  postgres_dev_data:
