@@ -178,8 +178,9 @@ def _parse_year_month(date_str: str) -> Optional[tuple]:
     return None
 
 
-def ingest_gdelt(db: Session, year_start: int = 2015, year_end: int = 2023) -> int:
+def ingest_gdelt(db: Session, year_start: int = 2010, year_end: int = 2024) -> int:
     from models import GdeltEvent, EventType, IngestionLog
+    from sqlalchemy.dialects.postgresql import insert as pg_insert
 
     log = IngestionLog(source="gdelt", status="running")
     db.add(log)
@@ -207,7 +208,7 @@ def ingest_gdelt(db: Session, year_start: int = 2015, year_end: int = 2023) -> i
                 points = fetch_timeline_range(code_gdelt, theme_query, year_start, year_end)
 
                 # Aggregate weekly data points → monthly counts per year.
-                monthly: dict = {}   # (year, month) → cumulative count
+                monthly: dict = {}
                 for point in points:
                     parsed = _parse_year_month(point.get("date", ""))
                     if not parsed:
@@ -217,24 +218,19 @@ def ingest_gdelt(db: Session, year_start: int = 2015, year_end: int = 2023) -> i
                         key = (yr, mo)
                         monthly[key] = monthly.get(key, 0) + int(point.get("value", 0))
 
-                # Upsert into DB.
+                # PostgreSQL upsert — atomic, no duplicates possible.
                 for (yr, mo), count in monthly.items():
-                    existing = db.query(GdeltEvent).filter_by(
+                    stmt = pg_insert(GdeltEvent.__table__).values(
                         country_code=code3,
                         event_type_id=et.id,
                         year=yr,
                         month=mo,
-                    ).first()
-                    if existing:
-                        existing.article_count = count
-                    else:
-                        db.add(GdeltEvent(
-                            country_code=code3,
-                            event_type_id=et.id,
-                            year=yr,
-                            month=mo,
-                            article_count=count,
-                        ))
+                        article_count=count,
+                    ).on_conflict_do_update(
+                        index_elements=["country_code", "event_type_id", "year", "month"],
+                        set_={"article_count": count},
+                    )
+                    db.execute(stmt)
                     total += 1
 
                 # Commit after each (country, theme) to preserve partial progress.

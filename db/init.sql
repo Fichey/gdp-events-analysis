@@ -41,7 +41,8 @@ CREATE TABLE IF NOT EXISTS analysis_results (
     year_end INTEGER,
     correlation_coefficient NUMERIC(10, 6),
     sample_size INTEGER,
-    calculated_at TIMESTAMP DEFAULT NOW()
+    calculated_at TIMESTAMP DEFAULT NOW(),
+    UNIQUE(country_code, event_type_id, year_start, year_end)
 );
 
 CREATE TABLE IF NOT EXISTS ingestion_log (

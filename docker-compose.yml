@@ -36,8 +36,8 @@ services:
         condition: service_healthy
     environment:
       DATABASE_URL: postgresql://app:app@db:5432/gdp_events
-      INGEST_YEAR_START: "2015"
-      INGEST_YEAR_END: "2023"
+      INGEST_YEAR_START: "2010"
+      INGEST_YEAR_END: "2025"
       INGEST_INTERVAL_HOURS: "24"
 
   processing:
@@ -48,6 +48,8 @@ services:
         condition: service_healthy
     environment:
       DATABASE_URL: postgresql://app:app@db:5432/gdp_events
+      INGEST_YEAR_START: "2010"
+      INGEST_YEAR_END: "2025"
 
   frontend:
     build: ./frontend

@@ -43,8 +43,10 @@ def fetch_indicator(country_alpha2: str, indicator: str, year_start: int, year_e
         return []
 
 
-def ingest_gdp(db: Session, year_start: int = 2010, year_end: int = 2023) -> int:
-    from ingestion.models import GdpData, IngestionLog
+def ingest_gdp(db: Session, year_start: int = 2010, year_end: int = 2024) -> int:
+    from models import GdpData, IngestionLog
+    from sqlalchemy.dialects.postgresql import insert as pg_insert
+    from datetime import datetime
 
     log = IngestionLog(source="worldbank", status="running")
     db.add(log)
@@ -69,15 +71,19 @@ def ingest_gdp(db: Session, year_start: int = 2010, year_end: int = 2023) -> int
                 gdp_usd = record["value"]
                 growth = growth_by_year.get(str(year))
 
-                existing = db.query(GdpData).filter_by(country_code=code3, year=year).first()
-                if existing:
-                    existing.gdp_usd = gdp_usd
-                    existing.gdp_growth_rate = growth
-                else:
-                    db.add(GdpData(country_code=code3, year=year, gdp_usd=gdp_usd, gdp_growth_rate=growth))
+                stmt = pg_insert(GdpData.__table__).values(
+                    country_code=code3,
+                    year=year,
+                    gdp_usd=gdp_usd,
+                    gdp_growth_rate=growth,
+                ).on_conflict_do_update(
+                    index_elements=["country_code", "year"],
+                    set_={"gdp_usd": gdp_usd, "gdp_growth_rate": growth},
+                )
+                db.execute(stmt)
                 total += 1
 
-            time.sleep(0.5)  # respect rate limits
+            time.sleep(0.5)
 
         db.commit()
         log.status = "success"
@@ -88,7 +94,6 @@ def ingest_gdp(db: Session, year_start: int = 2010, year_end: int = 2023) -> int
         log.error_message = str(e)
         logger.exception("GDP ingestion failed")
     finally:
-        from datetime import datetime
         log.finished_at = datetime.utcnow()
         db.commit()
 

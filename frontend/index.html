@@ -55,11 +55,11 @@
       </div>
       <div class="control-group">
         <label for="yearStart">Od roku</label>
-        <input type="number" id="yearStart" value="2015" min="2000" max="2030" style="width:90px" />
+        <input type="number" id="yearStart" value="2010" min="2000" max="2030" style="width:90px" />
       </div>
       <div class="control-group">
         <label for="yearEnd">Do roku</label>
-        <input type="number" id="yearEnd" value="2023" min="2000" max="2030" style="width:90px" />
+        <input type="number" id="yearEnd" value="2025" min="2000" max="2030" style="width:90px" />
       </div>
       <button onclick="loadData()">Załaduj dane</button>
     </div>
@@ -78,7 +78,7 @@
   </div>
 
   <div class="card">
-    <div class="section-title">Korelacje Pearsona: PKB vs Typ Eventu</div>
+    <div class="section-title">Korelacje Pearsona: PKB vs Typ Eventu <span id="corrYearLabel" style="font-size:0.85rem;font-weight:400;color:#666;margin-left:0.5rem"></span></div>
     <table class="correlation-table">
       <thead>
         <tr>
@@ -143,8 +143,9 @@ async function loadData() {
   const gdpUrl = `${API}/gdp/${country}?year_start=${yearStart}&year_end=${yearEnd}`;
   let eventsUrl = `${API}/events/${country}?year_start=${yearStart}&year_end=${yearEnd}`;
   if (eventType) eventsUrl += `&event_type=${eventType}`;
-  let corrUrl = `${API}/analysis/correlations?country_code=${country}`;
+  let corrUrl = `${API}/analysis/correlations?country_code=${country}&year_start=${yearStart}&year_end=${yearEnd}`;
   if (eventType) corrUrl += `&event_type=${eventType}`;
+  document.getElementById('corrYearLabel').textContent = `(${yearStart}–${yearEnd})`;
 
   try {
     const [gdpData, eventsData, corrData] = await Promise.all([
@@ -156,7 +157,7 @@ async function loadData() {
     renderGdpChart(gdpData);
     renderEventsChart(eventsData);
     renderCorrelations(corrData);
-    statusEl.textContent = `Załadowano: ${gdpData.length} rekordów PKB, ${eventsData.length} rekordów eventów, ${corrData.length} korelacji`;
+    statusEl.textContent = `Załadowano: ${gdpData.length} rekordów PKB, ${eventsData.length} rekordów eventów, ${corrData.length} korelacji (${yearStart}–${yearEnd})`;
     statusEl.style.color = '#2e7d32';
   } catch(err) {
     console.error('loadData failed:', err);
