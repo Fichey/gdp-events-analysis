@@ -55,6 +55,15 @@ class AnalysisResultOut(BaseModel):
         from_attributes = True
 
 
+class LagResultOut(BaseModel):
+    country_code: str
+    theme_code: str
+    theme_name: str
+    lag: int
+    correlation_coefficient: float
+    sample_size: int
+
+
 class HealthOut(BaseModel):
     status: str
     db: str

@@ -10,7 +10,7 @@
     body { font-family: 'Segoe UI', sans-serif; background: #f0f2f5; color: #333; }
     header { background: #1a237e; color: #fff; padding: 1.2rem 2rem; }
     header h1 { font-size: 1.5rem; }
-    header p { font-size: 0.9rem; opacity: 0.8; margin-top: 0.3rem; }
+    header p  { font-size: 0.9rem; opacity: 0.8; margin-top: 0.3rem; }
     .container { max-width: 1200px; margin: 2rem auto; padding: 0 1rem; }
     .card { background: #fff; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,.1); padding: 1.5rem; margin-bottom: 1.5rem; }
     .controls { display: flex; flex-wrap: wrap; gap: 1rem; align-items: flex-end; }
@@ -22,19 +22,32 @@
     .charts { display: grid; grid-template-columns: 1fr 1fr; gap: 1.5rem; }
     @media(max-width:768px) { .charts { grid-template-columns: 1fr; } }
     canvas { max-height: 320px; }
-    .correlation-table { width: 100%; border-collapse: collapse; font-size: 0.9rem; }
-    .correlation-table th { background: #1a237e; color: #fff; padding: 0.6rem 0.8rem; text-align: left; }
-    .correlation-table td { padding: 0.5rem 0.8rem; border-bottom: 1px solid #e0e0e0; }
-    .correlation-table tr:hover td { background: #f5f5f5; }
-    .badge { display: inline-block; padding: 0.2rem 0.5rem; border-radius: 4px; font-size: 0.8rem; font-weight: 600; }
-    .badge-pos { background: #e8f5e9; color: #2e7d32; }
-    .badge-neg { background: #ffebee; color: #c62828; }
-    .badge-neu { background: #fff3e0; color: #ef6c00; }
-    #status { font-size: 0.85rem; color: #888; margin-top: 0.5rem; }
     .section-title { font-size: 1.1rem; font-weight: 700; margin-bottom: 1rem; color: #1a237e; }
+    .section-sub   { font-size: 0.82rem; color: #777; margin: -0.6rem 0 1rem; }
+    /* correlation table */
+    .corr-table { width: 100%; border-collapse: collapse; font-size: 0.9rem; }
+    .corr-table th { background: #1a237e; color: #fff; padding: 0.6rem 0.8rem; text-align: left; }
+    .corr-table td { padding: 0.5rem 0.8rem; border-bottom: 1px solid #e0e0e0; }
+    .corr-table tr:hover td { background: #f5f5f5; }
+    .badge { display: inline-block; padding: 0.2rem 0.5rem; border-radius: 4px; font-size: 0.8rem; font-weight: 600; }
+    .badge-pos  { background: #e8f5e9; color: #2e7d32; }
+    .badge-neg  { background: #ffebee; color: #c62828; }
+    .badge-neu  { background: #fff3e0; color: #ef6c00; }
+    /* heatmap */
+    #heatmapContainer { overflow-x: auto; }
+    .hm-table { border-collapse: collapse; font-size: 0.82rem; }
+    .hm-table th { background: #f5f5f5; padding: 0.45rem 0.7rem; border: 1px solid #ddd; white-space: nowrap; text-align: center; }
+    .hm-table td { padding: 0.45rem 0.7rem; border: 1px solid #ddd; text-align: center; }
+    .hm-legend { display: flex; align-items: center; gap: 4px; margin-top: 0.75rem; font-size: 0.8rem; color: #666; }
+    /* anomaly table */
+    .anom-table { width: 100%; border-collapse: collapse; font-size: 0.88rem; }
+    .anom-table th { background: #1a237e; color: #fff; padding: 0.55rem 0.8rem; text-align: left; }
+    .anom-table td { padding: 0.48rem 0.8rem; border-bottom: 1px solid #e0e0e0; }
+    #status { font-size: 0.85rem; color: #888; margin-top: 0.5rem; }
   </style>
 </head>
 <body>
+
 <header>
   <h1>Wpływ zmian PKB krajów na ilość i typy organizowanych eventów</h1>
   <p>Dane: World Bank Open Data API &amp; GDELT Project API</p>
@@ -42,6 +55,7 @@
 
 <div class="container">
 
+  <!-- ── Filtry ── -->
   <div class="card">
     <div class="section-title">Filtry</div>
     <div class="controls">
@@ -61,29 +75,46 @@
         <label for="yearEnd">Do roku</label>
         <input type="number" id="yearEnd" value="2025" min="2000" max="2030" style="width:90px" />
       </div>
+      <div class="control-group">
+        <label for="metricSelect">Metryka korelacji</label>
+        <select id="metricSelect">
+          <option value="gdp">Wartość PKB (USD)</option>
+          <option value="growth">Wzrost PKB (%)</option>
+        </select>
+      </div>
       <button onclick="loadData()">Załaduj dane</button>
     </div>
     <div id="status"></div>
   </div>
 
+  <!-- ── PKB + Eventy ── -->
   <div class="charts">
     <div class="card">
       <div class="section-title">PKB (USD)</div>
       <canvas id="gdpChart"></canvas>
     </div>
     <div class="card">
-      <div class="section-title">Liczba artykułów GDELT (eventy)</div>
+      <div class="section-title">Liczba artykułów GDELT</div>
       <canvas id="eventsChart"></canvas>
     </div>
   </div>
 
+  <!-- ── Wzrost PKB r/r — markery recesji (#2) ── -->
   <div class="card">
-    <div class="section-title">Korelacje Pearsona: PKB vs Typ Eventu <span id="corrYearLabel" style="font-size:0.85rem;font-weight:400;color:#666;margin-left:0.5rem"></span></div>
-    <table class="correlation-table">
+    <div class="section-title">Wzrost PKB rok do roku (%)</div>
+    <p class="section-sub">Słupki czerwone = recesja (wzrost &lt; 0), zielone = wzrost. Kontekst dla analizy korelacji.</p>
+    <canvas id="growthChart" style="max-height:220px"></canvas>
+  </div>
+
+  <!-- ── Korelacje Pearsona — tabela (#1 growth toggle) ── -->
+  <div class="card">
+    <div class="section-title">
+      Korelacje Pearsona: PKB vs Typ Eventu
+      <span id="corrYearLabel" style="font-size:0.85rem;font-weight:400;color:#666;margin-left:0.5rem"></span>
+    </div>
+    <table class="corr-table">
       <thead>
-        <tr>
-          <th>Kraj</th><th>Typ eventu</th><th>Korelacja</th><th>Próba (lat)</th><th>Interpretacja</th>
-        </tr>
+        <tr><th>Kraj</th><th>Typ eventu</th><th>Korelacja</th><th>Próba (lat)</th><th>Interpretacja</th></tr>
       </thead>
       <tbody id="correlationBody">
         <tr><td colspan="5" style="text-align:center;padding:1rem;color:#999">Załaduj dane...</td></tr>
@@ -91,80 +122,160 @@
     </table>
   </div>
 
-</div>
+  <!-- ── Heatmapa (#3) ── -->
+  <div class="card">
+    <div class="section-title">Heatmapa korelacji: Wszystkie kraje × Typ Eventu</div>
+    <p class="section-sub">Zielony = pozytywna korelacja, czerwony = negatywna. Szary = brak danych.</p>
+    <div id="heatmapContainer"><p style="color:#999;text-align:center;padding:1rem">Załaduj dane...</p></div>
+  </div>
+
+  <!-- ── Analiza opóźnień (#4) ── -->
+  <div class="card">
+    <div class="section-title">Analiza opóźnień (Lag) – wzrost PKB vs eventy</div>
+    <p class="section-sub">
+      Lag &gt; 0: eventy WYPRZEDZAJĄ zmianę PKB (mogą być jej przyczyną) &nbsp;|&nbsp;
+      Lag &lt; 0: eventy NASTĘPUJĄ PO zmianie PKB (mogą być jej skutkiem)
+    </p>
+    <canvas id="lagChart" style="max-height:300px"></canvas>
+  </div>
+
+  <!-- ── Anomalie (#7) ── -->
+  <div class="card">
+    <div class="section-title">Anomalie miesięczne (z-score &gt; 2σ)</div>
+    <p class="section-sub">Miesiące z liczbą artykułów znacznie powyżej historycznej średniej dla danego kraju i typu eventu.</p>
+    <table class="anom-table">
+      <thead>
+        <tr><th>Kraj</th><th>Typ eventu</th><th>Miesiąc/rok</th><th>Artykuły</th><th>Średnia bazowa</th><th>Z-score</th></tr>
+      </thead>
+      <tbody id="anomalyBody">
+        <tr><td colspan="6" style="text-align:center;padding:1rem;color:#999">Załaduj dane...</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+</div><!-- /container -->
 
 <script>
 const API = '/api/v1';
-let gdpChart, eventsChart;
+let gdpChart, eventsChart, growthChart, lagChart;
+const MONTHS = ['','Sty','Lut','Mar','Kwi','Maj','Cze','Lip','Sie','Wrz','Paź','Lis','Gru'];
+
+// ── helpers ──────────────────────────────────────────────────────────────────
+
+async function safeFetch(url) {
+  const r = await fetch(url);
+  if (!r.ok) throw new Error(`HTTP ${r.status} → ${url}`);
+  return r.json();
+}
+
+function corrBadge(c) {
+  if (c > 0.5)  return ['badge-pos','Silna pozytywna'];
+  if (c < -0.5) return ['badge-neg','Silna negatywna'];
+  if (c > 0.2)  return ['badge-pos','Słaba pozytywna'];
+  if (c < -0.2) return ['badge-neg','Słaba negatywna'];
+  return ['badge-neu','Brak korelacji'];
+}
+
+/** Interpolate: red(−1) → white(0) → green(+1) */
+function corrColor(v) {
+  if (v === null || v === undefined) return '#eeeeee';
+  const c = Math.max(-1, Math.min(1, v));
+  if (c >= 0) {
+    const r = Math.round(255 - 209 * c);
+    const g = Math.round(255 - 130 * c);
+    const b = Math.round(255 - 205 * c);
+    return `rgb(${r},${g},${b})`;
+  }
+  const t = -c;
+  const r = Math.round(255 -  57 * t);
+  const g = Math.round(255 - 215 * t);
+  const b = Math.round(255 - 215 * t);
+  return `rgb(${r},${g},${b})`;
+}
+
+// ── init ─────────────────────────────────────────────────────────────────────
 
 async function init() {
-  const statusEl = document.getElementById('status');
+  const s = document.getElementById('status');
   try {
     const [countries, types] = await Promise.all([
       safeFetch(`${API}/gdp/countries`),
       safeFetch(`${API}/events/types`),
     ]);
     const cs = document.getElementById('countrySelect');
-    countries.forEach(c => {
-      const o = document.createElement('option');
-      o.value = c.code; o.textContent = c.name; cs.appendChild(o);
-    });
+    countries.forEach(c => { const o = new Option(c.name, c.code); cs.appendChild(o); });
     const et = document.getElementById('eventTypeSelect');
-    types.forEach(t => {
-      const o = document.createElement('option');
-      o.value = t.theme_code; o.textContent = t.theme_name; et.appendChild(o);
-    });
-    statusEl.textContent = `Gotowy. ${countries.length} krajów, ${types.length} typów eventów.`;
-    statusEl.style.color = '#2e7d32';
-  } catch(err) {
-    console.error('init failed:', err);
-    statusEl.textContent = `Błąd inicjalizacji: ${err.message}`;
-    statusEl.style.color = '#c62828';
+    types.forEach(t => { const o = new Option(t.theme_name, t.theme_code); et.appendChild(o); });
+    s.textContent = `Gotowy. ${countries.length} krajów, ${types.length} typów eventów.`;
+    s.style.color = '#2e7d32';
+  } catch(e) {
+    s.textContent = `Błąd inicjalizacji: ${e.message}`;
+    s.style.color = '#c62828';
   }
 }
 
-async function safeFetch(url) {
-  const r = await fetch(url);
-  if (!r.ok) throw new Error(`HTTP ${r.status} dla ${url}`);
-  const data = await r.json();
-  console.log(`OK ${url}`, data);
-  return data;
-}
+// ── loadData ─────────────────────────────────────────────────────────────────
 
 async function loadData() {
-  const country = document.getElementById('countrySelect').value;
+  const country   = document.getElementById('countrySelect').value;
   const eventType = document.getElementById('eventTypeSelect').value;
-  const yearStart = document.getElementById('yearStart').value;
-  const yearEnd = document.getElementById('yearEnd').value;
-  const statusEl = document.getElementById('status');
-  statusEl.textContent = 'Ładowanie...';
-  statusEl.style.color = '#888';
+  const ys        = document.getElementById('yearStart').value;
+  const ye        = document.getElementById('yearEnd').value;
+  const metric    = document.getElementById('metricSelect').value;
+  const s         = document.getElementById('status');
 
-  const gdpUrl = `${API}/gdp/${country}?year_start=${yearStart}&year_end=${yearEnd}`;
-  let eventsUrl = `${API}/events/${country}?year_start=${yearStart}&year_end=${yearEnd}`;
-  if (eventType) eventsUrl += `&event_type=${eventType}`;
-  let corrUrl = `${API}/analysis/correlations?country_code=${country}&year_start=${yearStart}&year_end=${yearEnd}`;
+  s.textContent = 'Ładowanie…';
+  s.style.color = '#888';
+
+  // Build URLs
+  const gdpUrl  = `${API}/gdp/${country}?year_start=${ys}&year_end=${ye}`;
+  let evUrl     = `${API}/events/${country}?year_start=${ys}&year_end=${ye}`;
+  if (eventType) evUrl += `&event_type=${eventType}`;
+
+  // Filtered correlation (selected country)
+  let corrUrl = `${API}/analysis/correlations?country_code=${country}&year_start=${ys}&year_end=${ye}&metric=${metric}`;
   if (eventType) corrUrl += `&event_type=${eventType}`;
-  document.getElementById('corrYearLabel').textContent = `(${yearStart}–${yearEnd})`;
+
+  // Heatmap: ALL countries, no country filter
+  let heatUrl = `${API}/analysis/correlations?year_start=${ys}&year_end=${ye}&metric=${metric}`;
+  if (eventType) heatUrl += `&event_type=${eventType}`;
+
+  // Lag analysis
+  let lagUrl = `${API}/analysis/correlations/lag?country_code=${country}&year_start=${ys}&year_end=${ye}`;
+  if (eventType) lagUrl += `&event_type=${eventType}`;
+
+  // Anomalies
+  let anomUrl = `${API}/analysis/anomalies?country_code=${country}&year_start=${ys}&year_end=${ye}`;
+  if (eventType) anomUrl += `&event_type=${eventType}`;
+
+  // Update labels
+  document.getElementById('corrYearLabel').textContent =
+    `(${ys}–${ye}, metryka: ${metric === 'growth' ? 'wzrost PKB' : 'wartość PKB'})`;
 
   try {
-    const [gdpData, eventsData, corrData] = await Promise.all([
-      safeFetch(gdpUrl),
-      safeFetch(eventsUrl),
-      safeFetch(corrUrl),
+    const [gdpData, evData, corrData, heatData, lagData, anomData] = await Promise.all([
+      safeFetch(gdpUrl), safeFetch(evUrl), safeFetch(corrUrl),
+      safeFetch(heatUrl), safeFetch(lagUrl), safeFetch(anomUrl),
     ]);
 
     renderGdpChart(gdpData);
-    renderEventsChart(eventsData);
+    renderGrowthChart(gdpData);
+    renderEventsChart(evData);
     renderCorrelations(corrData);
-    statusEl.textContent = `Załadowano: ${gdpData.length} rekordów PKB, ${eventsData.length} rekordów eventów, ${corrData.length} korelacji (${yearStart}–${yearEnd})`;
-    statusEl.style.color = '#2e7d32';
-  } catch(err) {
-    console.error('loadData failed:', err);
-    statusEl.textContent = `Błąd: ${err.message}`;
-    statusEl.style.color = '#c62828';
+    renderHeatmap(heatData);
+    renderLagChart(lagData);
+    renderAnomalies(anomData);
+
+    s.textContent = `Załadowano: ${gdpData.length} PKB, ${evData.length} eventów, `
+      + `${corrData.length} korelacji, ${anomData.length} anomalii (${ys}–${ye})`;
+    s.style.color = '#2e7d32';
+  } catch(e) {
+    s.textContent = `Błąd: ${e.message}`;
+    s.style.color = '#c62828';
   }
 }
+
+// ── render functions ─────────────────────────────────────────────────────────
 
 function renderGdpChart(data) {
   const labels = data.map(d => d.year);
@@ -172,52 +283,64 @@ function renderGdpChart(data) {
   if (gdpChart) gdpChart.destroy();
   gdpChart = new Chart(document.getElementById('gdpChart'), {
     type: 'line',
-    data: {
-      labels,
-      datasets: [{ label: 'PKB (bln USD)', data: values, borderColor: '#1a237e',
-        backgroundColor: 'rgba(26,35,126,0.1)', fill: true, tension: 0.3 }]
+    data: { labels, datasets: [{ label: 'PKB (bln USD)', data: values,
+      borderColor: '#1a237e', backgroundColor: 'rgba(26,35,126,0.1)', fill: true, tension: 0.3 }] },
+    options: { responsive: true, plugins: { legend: { position: 'bottom' } } },
+  });
+}
+
+function renderGrowthChart(data) {
+  // #2 – recession markers: red bars for negative growth
+  const labels = data.map(d => d.year);
+  const values = data.map(d => d.gdp_growth_rate ?? null);
+  const colors = values.map(v => v === null ? '#bdbdbd' : v < 0 ? '#ef5350' : '#66bb6a');
+  if (growthChart) growthChart.destroy();
+  growthChart = new Chart(document.getElementById('growthChart'), {
+    type: 'bar',
+    data: { labels, datasets: [{ label: 'Wzrost PKB (%)', data: values,
+      backgroundColor: colors, borderWidth: 0 }] },
+    options: {
+      responsive: true,
+      plugins: { legend: { position: 'bottom' } },
+      scales: {
+        y: {
+          grid: {
+            color: ctx => ctx.tick.value === 0 ? '#555' : '#e0e0e0',
+            lineWidth: ctx => ctx.tick.value === 0 ? 2 : 1,
+          },
+        },
+      },
     },
-    options: { responsive: true, plugins: { legend: { position: 'bottom' } } }
   });
 }
 
 function renderEventsChart(data) {
-  const types = [...new Set(data.map(d => d.theme_code || 'ALL'))];
-  const years = [...new Set(data.map(d => d.year))].sort();
+  const types  = [...new Set(data.map(d => d.theme_code || 'ALL'))];
+  const years  = [...new Set(data.map(d => d.year))].sort();
   const colors = ['#e53935','#8e24aa','#1e88e5','#43a047','#fb8c00','#6d4c41'];
-
   const datasets = types.map((t, i) => ({
     label: t,
-    data: years.map(y => {
-      const row = data.find(d => d.year === y && (d.theme_code || 'ALL') === t);
-      return row ? row.article_count : 0;
-    }),
+    data: years.map(y => { const r = data.find(d => d.year===y && (d.theme_code||'ALL')===t); return r ? r.article_count : 0; }),
     backgroundColor: colors[i % colors.length],
   }));
-
   if (eventsChart) eventsChart.destroy();
   eventsChart = new Chart(document.getElementById('eventsChart'), {
     type: 'bar',
     data: { labels: years, datasets },
     options: { responsive: true, plugins: { legend: { position: 'bottom' } },
-      scales: { x: { stacked: true }, y: { stacked: true } } }
+      scales: { x: { stacked: true }, y: { stacked: true } } },
   });
 }
 
 function renderCorrelations(data) {
-  const tbody = document.getElementById('correlationBody');
+  const tb = document.getElementById('correlationBody');
   if (!data.length) {
-    tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;color:#999">Brak danych korelacji. Uruchom procesor.</td></tr>';
+    tb.innerHTML = '<tr><td colspan="5" style="text-align:center;color:#999">Brak danych korelacji dla wybranego przedziału.</td></tr>';
     return;
   }
-  tbody.innerHTML = data.map(r => {
+  tb.innerHTML = data.map(r => {
     const c = parseFloat(r.correlation_coefficient);
-    let badge, interp;
-    if (c > 0.5) { badge = 'badge-pos'; interp = 'Silna pozytywna'; }
-    else if (c < -0.5) { badge = 'badge-neg'; interp = 'Silna negatywna'; }
-    else if (c > 0.2) { badge = 'badge-pos'; interp = 'Słaba pozytywna'; }
-    else if (c < -0.2) { badge = 'badge-neg'; interp = 'Słaba negatywna'; }
-    else { badge = 'badge-neu'; interp = 'Brak korelacji'; }
+    const [badge, interp] = corrBadge(c);
     return `<tr>
       <td>${r.country_code}</td>
       <td>${r.theme_name}</td>
@@ -228,6 +351,107 @@ function renderCorrelations(data) {
   }).join('');
 }
 
+function renderHeatmap(data) {
+  // #3 – build lookup {country: {theme: corr}}
+  const con = document.getElementById('heatmapContainer');
+  if (!data.length) {
+    con.innerHTML = '<p style="color:#999;text-align:center;padding:1rem">Brak danych heatmapy.</p>';
+    return;
+  }
+  const themes    = [...new Set(data.map(d => d.theme_code))].sort();
+  const countries = [...new Set(data.map(d => d.country_code))].sort();
+  const lk = {};
+  data.forEach(d => { (lk[d.country_code] = lk[d.country_code] || {})[d.theme_code] = d.correlation_coefficient; });
+
+  let html = '<table class="hm-table"><tr>'
+    + '<th style="text-align:left">Kraj \\ Temat</th>'
+    + themes.map(t => `<th>${t}</th>`).join('') + '</tr>';
+
+  countries.forEach(c => {
+    html += `<tr><td style="font-weight:600;text-align:left">${c}</td>`;
+    themes.forEach(t => {
+      const v   = lk[c]?.[t] ?? null;
+      const bg  = corrColor(v);
+      const txt = v !== null ? v.toFixed(2) : '–';
+      const col = v !== null && Math.abs(v) > 0.55 ? '#fff' : '#333';
+      html += `<td style="background:${bg};color:${col}">${txt}</td>`;
+    });
+    html += '</tr>';
+  });
+  html += '</table>';
+
+  // Legend strip
+  html += '<div class="hm-legend"><span>−1.0</span>';
+  for (let i = -10; i <= 10; i++) {
+    html += `<div style="width:18px;height:12px;background:${corrColor(i/10)};border:1px solid #ccc"></div>`;
+  }
+  html += '<span>+1.0</span></div>';
+  con.innerHTML = html;
+}
+
+function renderLagChart(data) {
+  // #4 – grouped bar: X = lag (-2…+2), bar per event type
+  const themes  = [...new Set(data.map(d => d.theme_code))].sort();
+  const lagVals = [-2,-1,0,1,2];
+  const colors  = ['#e53935','#8e24aa','#1e88e5','#43a047','#fb8c00','#6d4c41'];
+  const labels  = lagVals.map(l =>
+    l === 0 ? 'Lag 0' : l > 0 ? `Lag +${l}\n(wyprzedza)` : `Lag ${l}\n(następuje)`);
+  const datasets = themes.map((t, i) => ({
+    label: t,
+    data: lagVals.map(l => {
+      const r = data.find(d => d.theme_code === t && d.lag === l);
+      return r ? r.correlation_coefficient : null;
+    }),
+    backgroundColor: colors[i % colors.length] + 'bb',
+    borderColor:     colors[i % colors.length],
+    borderWidth: 1,
+  }));
+
+  if (lagChart) lagChart.destroy();
+  lagChart = new Chart(document.getElementById('lagChart'), {
+    type: 'bar',
+    data: { labels, datasets },
+    options: {
+      responsive: true,
+      plugins: { legend: { position: 'bottom' } },
+      scales: {
+        y: {
+          min: -1, max: 1,
+          title: { display: true, text: 'Korelacja Pearsona' },
+          grid: {
+            color: ctx => ctx.tick.value === 0 ? '#555' : '#e0e0e0',
+            lineWidth: ctx => ctx.tick.value === 0 ? 2 : 1,
+          },
+        },
+        x: { title: { display: true, text: 'Przesunięcie czasowe (lata)' } },
+      },
+    },
+  });
+}
+
+function renderAnomalies(data) {
+  // #7 – top anomalous months by z-score
+  const tb = document.getElementById('anomalyBody');
+  if (!data.length) {
+    tb.innerHTML = '<tr><td colspan="6" style="text-align:center;color:#999;padding:1rem">Brak anomalii w wybranym przedziale.</td></tr>';
+    return;
+  }
+  tb.innerHTML = data.map(r => {
+    const z = parseFloat(r.z_score);
+    const intensity = Math.min(0.35, (z - 2) / 10);
+    const bg = `rgba(239,83,80,${intensity})`;
+    return `<tr style="background:${bg}">
+      <td>${r.country_code}</td>
+      <td>${r.theme_name}</td>
+      <td>${MONTHS[r.month]} ${r.year}</td>
+      <td>${r.article_count}</td>
+      <td>${r.mean_count.toFixed(1)}</td>
+      <td><strong>+${z.toFixed(2)}σ</strong></td>
+    </tr>`;
+  }).join('');
+}
+
+// ── boot ─────────────────────────────────────────────────────────────────────
 init();
 </script>
 </body>
