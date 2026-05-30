@@ -25,8 +25,8 @@ services:
         condition: service_healthy
     environment:
       DATABASE_URL: postgresql://app:app@db:5432/gdp_events
-    expose:
-      - "8000"
+    ports:
+      - "8000:8000"
 
   ingestion:
     build: ./ingestion

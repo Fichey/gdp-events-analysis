@@ -2,6 +2,18 @@
 
 Analiza zależności między zmianami PKB a częstotliwością i typami zdarzeń społecznych w 10 krajach (2010–obecnie).
 
+## Zespół i podział prac
+
+| Moduł | Odpowiedzialność |
+|---|---|
+| Frontend (SPA, Chart.js, wykresy, heatmapa, lag, anomalie) | Karol Socha |
+| Backend (FastAPI, REST API, endpointy korelacji on-the-fly) | Karol Socha |
+| Baza danych (schemat PostgreSQL, migracje, upsert) | Cezary Polkowski |
+| Processing (korelacja Pearsona, procesor w tle) | Cezary Polkowski |
+| Docker / Docker Compose (środowisko prod, dev, test) | Cezary Polkowski |
+| Testy (jednostkowe pytest, wydajnościowe Locust) | wspólnie |
+| Ingestion (World Bank API, GDELT v1 GKG, GDELT v2 API, seed) | wspólnie |
+
 ## Źródła danych
 
 | Źródło | Dane | API |

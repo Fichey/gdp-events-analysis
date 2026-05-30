@@ -11,7 +11,7 @@ services:
     volumes:
       - ./db/init.sql:/docker-entrypoint-initdb.d/init.sql
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U app -d gdp_events_test"]
+      test: ["CMD-SHELL", "pg_isready -U app && psql -U app -d gdp_events_test -c 'SELECT 1' > /dev/null 2>&1"]
       interval: 5s
       retries: 10
 
@@ -24,6 +24,13 @@ services:
         condition: service_healthy
     ports:
       - "8001:8000"
+    healthcheck:
+      test: ["CMD", "python", "-c",
+             "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+      start_period: 15s
 
   unit-tests:
     build:
@@ -36,7 +43,7 @@ services:
       db:
         condition: service_healthy
       backend:
-        condition: service_started
+        condition: service_healthy
     command: pytest /tests/unit -v --tb=short
 
   perf-tests:
@@ -46,7 +53,8 @@ services:
     environment:
       API_URL: http://backend:8000
     depends_on:
-      - backend
+      backend:
+        condition: service_healthy
     command: >
       locust -f /tests/performance/locustfile.py
       --headless -u 10 -r 2 --run-time 30s

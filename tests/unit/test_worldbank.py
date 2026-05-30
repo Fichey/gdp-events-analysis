@@ -10,8 +10,9 @@ from worldbank_ingester import fetch_indicator, WB_COUNTRY_MAP
 
 class TestFetchIndicator:
     def test_returns_empty_on_http_error(self):
+        import requests as _requests
         with patch("worldbank_ingester.requests.get") as mock_get:
-            mock_get.return_value.raise_for_status.side_effect = Exception("500")
+            mock_get.side_effect = _requests.RequestException("500")
             result = fetch_indicator("PL", "NY.GDP.MKTP.CD", 2020, 2022)
         assert result == []
 
